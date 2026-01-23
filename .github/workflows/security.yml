@@ -9,9 +9,9 @@ jobs:
   security:
     runs-on: ubuntu-latest
     env:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SONAR_TOKEN: abca261e078069b425733429f6f4047137422128
+      SNYK_TOKEN: db383992-276f-48b7-8e3d-fcc319bbc90a
+      VERCEL_TOKEN: M68e9MywnSMVenyPvBeAFPEo
 
     steps:
     - name: Checkout Code
@@ -33,8 +33,8 @@ jobs:
           -Dsonar.projectKey=nextjs-devsecops
           -Dsonar.sources=.
       env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        SONAR_TOKEN: abca261e078069b425733429f6f4047137422128
+        SONAR_HOST_URL: https://sonarcloud.io
 
     # 📦 SNYK – Dependency Vulnerabilities
     - name: Snyk Dependency Scan
@@ -42,7 +42,7 @@ jobs:
       with:
         command: test
       env:
-        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        SNYK_TOKEN: db383992-276f-48b7-8e3d-fcc319bbc90a
 
     # 🐳 BUILD DOCKER IMAGE
     - name: Docker Build
