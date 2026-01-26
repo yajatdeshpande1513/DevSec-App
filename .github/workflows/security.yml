@@ -65,14 +65,14 @@ jobs:
         vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
 
-    # 🚨 NEW: Report failure to the frontend
     - name: Report Security Failure
       if: failure()
       run: |
-        curl -X POST https://your-vercel-domain.com/api/security-report \
+        # IMPORTANT: Replace the URL below with your REAL Vercel deployment URL
+        curl -X POSThttps://dev-sec-app-8l55.vercel.app/ \
         -H "Content-Type: application/json" \
         -d '{
           "status": "vulnerable",
-          "message": "Security Gatekeeper blocked a build due to vulnerabilities.",
+          "message": "Gatekeeper Alert: Security violation detected. Pipeline locked.",
           "timestamp": "'$(date)'"
         }'
