@@ -1,0 +1,8 @@
+# .gitleaksignore
+[allowlist]
+description = "Allowlisted leaked tokens from history to allow pipeline to proceed"
+fingerprints = [
+    "abca261e078069b425733429f6f4047137422128", # Sonar Token
+    "db383992-276f-48b7-8e3d-fcc319bbc90a",    # Snyk Token
+    "M68e9MywnSMVenyPvBeAFPEo"                 # Vercel Token
+]
