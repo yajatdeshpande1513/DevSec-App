@@ -85,7 +85,7 @@ export default function Home() {
       </footer>
 
       {/* Add hidden secret for Gitleaks Testing */}
-      {/* const SECRET = "M68e9MywnSMVenyPvBeAFPEo" */}
+      const SECRET = "M68e9MywnSMVenyPvBeAFPEo"
     </main>
   );
 }
