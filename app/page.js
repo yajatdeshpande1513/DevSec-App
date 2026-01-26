@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 
 export default function Home() {
   const [report, setReport] = useState({ status: 'loading', message: '' });
-  const [glitch, setGlitch] = useState(false);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -11,81 +10,71 @@ export default function Home() {
         const res = await fetch('/api/security-report', { cache: 'no-store' });
         const data = await res.json();
         setReport(data);
-        if (data.status === 'vulnerable') setGlitch(true);
       } catch (e) {
-        setReport({ status: 'error', message: 'Offline' });
+        setReport({ status: 'error', message: 'System Link Offline' });
       }
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000); // Fast polling for demo
+    const interval = setInterval(fetchStatus, 5000); 
     return () => clearInterval(interval);
   }, []);
 
   const isVulnerable = report.status === 'vulnerable';
 
   return (
-    <main className={`flex min-h-screen flex-col items-center justify-center p-6 transition-all duration-1000 ${isVulnerable ? 'bg-red-950 text-red-200' : 'bg-slate-950 text-emerald-400'} font-mono overflow-hidden`}>
+    <main className={`min-h-screen flex items-center justify-center p-6 transition-all duration-1000 font-mono ${isVulnerable ? 'bg-red-950' : 'bg-slate-950'}`}>
       
-      {/* Dynamic Grid Background */}
-      <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(#10b981 1px, transparent 1px), linear-gradient(90deg, #10b981 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+      {/* Cyber Grid Overlay */}
+      <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: `linear-gradient(${isVulnerable ? '#ef4444' : '#10b981'} 1px, transparent 1px), linear-gradient(90deg, ${isVulnerable ? '#ef4444' : '#10b981'} 1px, transparent 1px)`, backgroundSize: '50px 50px' }}></div>
 
-      {/* Cyber Alert Banner */}
-      {isVulnerable && (
-        <div className="fixed top-0 w-full bg-red-600/90 backdrop-blur-md text-white py-3 text-center animate-bounce z-50 border-b-2 border-red-400 shadow-[0_0_20px_rgba(220,38,38,0.5)]">
-          <span className="text-xl font-black uppercase tracking-widest">⚠️ SECURITY BREACH DETECTED ⚠️</span>
-        </div>
-      )}
-
-      {/* Status HUD */}
-      <div className="z-10 w-full max-w-4xl backdrop-blur-xl bg-white/5 border border-white/10 p-8 rounded-2xl shadow-2xl">
-        <div className="flex justify-between items-center border-b border-white/10 pb-6 mb-8">
+      {/* Main Glass Card */}
+      <div className={`relative z-10 w-full max-w-2xl backdrop-blur-md bg-white/5 border-2 rounded-3xl p-8 shadow-2xl transition-all ${isVulnerable ? 'border-red-500 shadow-red-500/20' : 'border-emerald-500/50 shadow-emerald-500/20'}`}>
+        
+        {/* Header Status HUD */}
+        <div className="flex justify-between items-start mb-12">
           <div>
-            <h2 className="text-xs uppercase tracking-[0.3em] opacity-50 mb-1">System Node</h2>
-            <p className="text-lg">GATEKEEPER-ALPHA-01</p>
+            <h2 className="text-[10px] uppercase tracking-[0.4em] text-white/40 mb-1">Secure Node</h2>
+            <p className="text-white text-sm font-bold tracking-widest">ALPHA-GATE-01</p>
           </div>
           <div className="text-right">
-            <h2 className="text-xs uppercase tracking-[0.3em] opacity-50 mb-1">Status</h2>
-            <p className={`text-lg font-bold ${isVulnerable ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
-              {isVulnerable ? '● COMPROMISED' : '● SECURE'}
+            <h2 className="text-[10px] uppercase tracking-[0.4em] text-white/40 mb-1">Defense Status</h2>
+            <p className={`text-sm font-black tracking-tighter ${isVulnerable ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
+              {isVulnerable ? '● CRITICAL BREACH' : '● ACTIVE PROTECTION'}
             </p>
           </div>
         </div>
 
-        {/* Interactive Centerpiece */}
-        <div className="relative flex flex-col items-center py-12">
-          <div className={`absolute -inset-10 rounded-full blur-3xl opacity-20 ${isVulnerable ? 'bg-red-600' : 'bg-emerald-500'}`}></div>
-          <h1 className={`text-5xl md:text-7xl font-black text-center mb-4 transition-all ${glitch ? 'animate-pulse' : ''}`}>
-            DEV<span className={isVulnerable ? 'text-red-600' : 'text-emerald-500'}>SEC</span>OPS
+        {/* Central Visual */}
+        <div className="flex flex-col items-center py-10">
+          <div className={`w-24 h-24 rounded-full flex items-center justify-center border-2 mb-6 transition-all ${isVulnerable ? 'border-red-500 bg-red-500/10' : 'border-emerald-500 bg-emerald-500/10'}`}>
+            <span className="text-4xl">{isVulnerable ? '⚠️' : '🛡️'}</span>
+          </div>
+          <h1 className={`text-5xl font-black mb-2 text-center tracking-tighter ${isVulnerable ? 'text-white' : 'text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400'}`}>
+            DEV<span className={isVulnerable ? 'text-red-500' : ''}>SEC</span>OPS
           </h1>
-          <p className="text-center max-w-md opacity-70 leading-relaxed">
-            Real-time automated security gates for Next.js applications using Gitleaks, Snyk, and SonarQube.
+          <p className="text-white/60 text-center text-sm max-w-xs uppercase tracking-widest leading-relaxed">
+            Automated Security Infrastructure for Next.js
           </p>
         </div>
 
-        {/* Scan Modules Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-          {['SAST', 'SCA', 'IaC'].map((tech) => (
-            <div key={tech} className="bg-white/5 border border-white/10 p-4 rounded-lg hover:bg-white/10 transition-colors cursor-crosshair group">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-bold opacity-60">{tech}</span>
-                <div className={`h-2 w-2 rounded-full ${isVulnerable ? 'bg-red-500' : 'bg-emerald-500 shadow-[0_0_8px_#10b981]'}`}></div>
-              </div>
-              <p className="text-sm">Scan {isVulnerable ? 'Blocked' : 'Verified'}</p>
-            </div>
-          ))}
+        {/* Dynamic Alert Box */}
+        <div className={`mt-8 p-4 rounded-xl border transition-all ${isVulnerable ? 'bg-red-500/20 border-red-500' : 'bg-emerald-500/5 border-emerald-500/30'}`}>
+          <p className={`text-xs font-bold mb-1 ${isVulnerable ? 'text-red-400' : 'text-emerald-500'}`}>
+            {isVulnerable ? 'ANALYSIS RESULT' : 'SYSTEM LOG'}
+          </p>
+          <p className="text-white text-sm italic">{report.message}</p>
+          {isVulnerable && <p className="text-[10px] text-red-400/60 mt-2">TIMESTAMP: {report.timestamp}</p>}
         </div>
+
       </div>
 
-      {/* Footer Info */}
-      <footer className="mt-12 text-[10px] opacity-40 flex gap-8 uppercase tracking-widest">
-        <span>Build: 2026.01.26</span>
-        <span>Node: 20.x Alpine</span>
-        <span>Environment: Hardened</span>
-      </footer>
-
-      {/* Add hidden secret for Gitleaks Testing */}
-      const SECRET = "***REMOVED***"
+      {/* Footer Cyber Decoration */}
+      <div className="fixed bottom-6 text-[10px] text-white/20 uppercase tracking-[0.5em] flex gap-10">
+        <span>Gitleaks: {isVulnerable ? 'FAIL' : 'PASS'}</span>
+        <span>Snyk: {isVulnerable ? 'BLOCK' : 'PASS'}</span>
+        <span>Sonar: VERIFIED</span>
+      </div>
     </main>
   );
 }

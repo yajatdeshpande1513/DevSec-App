@@ -1,22 +1,24 @@
 import { NextResponse } from 'next/server';
 
-let statusStore = { 
+// This acts as our temporary "in-memory" database
+let securityStatus = { 
   status: 'secure', 
-  message: 'All systems clear', 
-  timestamp: new Date().toLocaleTimeString() 
+  message: 'All security gates verified. System standing by.', 
+  timestamp: new Date().toISOString() 
 };
 
 export async function POST(request) {
-  const data = await request.json();
-  statusStore = { 
-    ...data, 
-    timestamp: new Date().toLocaleTimeString() 
-  };
-  return NextResponse.json({ success: true });
+  try {
+    const data = await request.json();
+    securityStatus = data;
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ success: false }, { status: 400 });
+  }
 }
 
 export async function GET() {
-  return NextResponse.json(statusStore, {
+  return NextResponse.json(securityStatus, {
     headers: { 'Cache-Control': 'no-store, max-age=0' }
   });
 }

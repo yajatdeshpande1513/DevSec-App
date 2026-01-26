@@ -68,8 +68,7 @@ jobs:
     - name: Report Security Failure
       if: failure()
       run: |
-        # IMPORTANT: Replace the URL below with your REAL Vercel deployment URL
-        curl -X POSThttps://dev-sec-app-8l55.vercel.app/ \
+        curl -X POST https://dev-sec-app-8l55.vercel.app/api/security-report \
         -H "Content-Type: application/json" \
         -d '{
           "status": "vulnerable",
