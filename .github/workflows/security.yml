@@ -65,6 +65,18 @@ jobs:
         vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
 
+
+    - name: Report Security Success
+      if: success()
+      run: |
+        curl -X POST https://dev-sec-app-8l55.vercel.app/api/security-report \
+        -H "Content-Type: application/json" \
+        -d '{
+          "status": "secure",
+          "message": "All gates passed: Gitleaks, SonarQube, Snyk, Trivy, and Checkov verified clean. Deployed at '$(date)'.",
+          "timestamp": "'$(date)'"
+        }'
+
     - name: Report Security Failure
       if: failure()
       run: |
