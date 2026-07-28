@@ -97,18 +97,20 @@ jobs:
 
     - name: Report Security Status
       if: always()
+      continue-on-error: true
       run: |
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         curl -X POST https://dev-sec-app-8l55.vercel.app/api/security-report \
         -H "Content-Type: application/json" \
-        -d '{
-          "status": "${{ steps.overall.outputs.status }}",
-          "message": "Pipeline run completed at '$(date)'.",
-          "timestamp": "'$(date)'",
-          "gates": {
-            "gitleaks": "${{ steps.gitleaks.outcome }}",
-            "sonarqube": "${{ steps.sonar.outcome }}",
-            "snyk": "${{ steps.snyk.outcome }}",
-            "trivy": "${{ steps.trivy.outcome }}",
-            "checkov": "${{ steps.checkov.outcome }}"
+        -d "{
+          \"status\": \"${{ steps.overall.outputs.status }}\",
+          \"message\": \"Pipeline run completed at $TIMESTAMP\",
+          \"timestamp\": \"$TIMESTAMP\",
+          \"gates\": {
+            \"gitleaks\": \"${{ steps.gitleaks.outcome }}\",
+            \"sonarqube\": \"${{ steps.sonar.outcome }}\",
+            \"snyk\": \"${{ steps.snyk.outcome }}\",
+            \"trivy\": \"${{ steps.trivy.outcome }}\",
+            \"checkov\": \"${{ steps.checkov.outcome }}\"
           }
-        }'
+        }"
