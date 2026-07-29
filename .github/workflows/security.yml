@@ -70,7 +70,7 @@ jobs:
       with:
         directory: terraform
         framework: terraform
-        soft_fail: true
+        soft_fail: false   # <-- was true; a soft-failed scan can never fail the gate
 
     - name: Determine Overall Status
       id: overall
@@ -79,6 +79,7 @@ jobs:
         if [ "${{ steps.gitleaks.outcome }}" = "failure" ] || \
            [ "${{ steps.sonar.outcome }}" = "failure" ] || \
            [ "${{ steps.snyk.outcome }}" = "failure" ] || \
+           [ "${{ steps.docker_build.outcome }}" = "failure" ] || \
            [ "${{ steps.trivy.outcome }}" = "failure" ] || \
            [ "${{ steps.checkov.outcome }}" = "failure" ]; then
           echo "status=vulnerable" >> $GITHUB_OUTPUT
@@ -87,7 +88,9 @@ jobs:
         fi
 
     - name: Deploy to Vercel
+      id: deploy
       if: steps.overall.outputs.status == 'secure'
+      continue-on-error: true
       run: |
         npm install -g vercel
         vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
@@ -97,19 +100,23 @@ jobs:
     - name: Report Security Status
       if: always()
       continue-on-error: true
+      env:
+        REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
       run: |
         TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        curl -X POST https://dev-sec-app-8l55.vercel.app/api/security-report \
+        DEPLOY_OUTCOME="${{ steps.deploy.outcome || 'skipped' }}"
+        curl -sS -X POST https://dev-sec-app-8l55.vercel.app/api/security-report \
         -H "Content-Type: application/json" \
+        -H "x-webhook-secret: $REPORT_WEBHOOK_SECRET" \
         -d "{
           \"status\": \"${{ steps.overall.outputs.status }}\",
-          \"message\": \"Pipeline run completed at $TIMESTAMP\",
+          \"message\": \"Pipeline run completed at $TIMESTAMP (deploy: $DEPLOY_OUTCOME)\",
           \"timestamp\": \"$TIMESTAMP\",
           \"gates\": {
             \"gitleaks\": \"${{ steps.gitleaks.outcome }}\",
             \"sonarqube\": \"${{ steps.sonar.outcome }}\",
             \"snyk\": \"${{ steps.snyk.outcome }}\",
-            \"trivy\": \"${{ steps.trivy.outcome }}\",
+            \"trivy\": \"${{ steps.trivy.outcome || 'skipped' }}\",
             \"checkov\": \"${{ steps.checkov.outcome }}\"
           }
         }"
