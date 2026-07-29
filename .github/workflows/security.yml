@@ -102,10 +102,11 @@ jobs:
       continue-on-error: true
       env:
         REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       run: |
         TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         DEPLOY_OUTCOME="${{ steps.deploy.outcome || 'skipped' }}"
-        curl -sS -X POST https://dev-sec-app-8l55.vercel.app/api/security-report \
+        curl -sS -X POST $WEBHOOK_URL \
         -H "Content-Type: application/json" \
         -H "x-webhook-secret: $REPORT_WEBHOOK_SECRET" \
         -d "{
