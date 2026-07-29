@@ -18,7 +18,20 @@ const defaultStatus = {
 
 export async function POST(request) {
   try {
+    // --- Auth check: only GitHub Actions with the shared secret can write ---
+    const incomingSecret = request.headers.get('x-webhook-secret');
+    const expectedSecret = process.env.REPORT_WEBHOOK_SECRET;
+
+    if (!expectedSecret || incomingSecret !== expectedSecret) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
     const data = await request.json();
+
+    // Basic shape validation so bad payloads can't corrupt the dashboard
+    if (!data || typeof data.status !== 'string' || typeof data.message !== 'string') {
+      return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
+    }
 
     await redis.set(STATUS_KEY, data);
     await redis.lpush(HISTORY_KEY, data);
