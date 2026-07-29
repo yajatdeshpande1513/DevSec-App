@@ -1,0 +1,115 @@
+name: DevSecOps Security Gatekeeper
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Gitleaks Scan
+      id: gitleaks
+      continue-on-error: true
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:latest detect --source=/repo --no-git -v
+
+    - name: SonarQube Scan
+      id: sonar
+      uses: SonarSource/sonarqube-scan-action@v2
+      continue-on-error: true
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: https://sonarcloud.io
+
+    - name: Snyk Dependency Scan
+      id: snyk
+      uses: snyk/actions/node@master
+      continue-on-error: true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        command: test
+
+    - name: Docker Build
+      id: docker_build
+      run: docker build -t nextjs-secure .
+      continue-on-error: true
+
+    - name: Trivy Container Scan
+      id: trivy
+      if: steps.docker_build.outcome == 'success'
+      uses: aquasecurity/trivy-action@master
+      continue-on-error: true
+      with:
+        image-ref: nextjs-secure
+        severity: CRITICAL
+        exit-code: 1
+
+    - name: Terraform Init
+      id: tf_init
+      run: |
+        cd terraform
+        terraform init -backend=false
+      continue-on-error: true
+
+    - name: Checkov Scan (IaC)
+      id: checkov
+      uses: bridgecrewio/checkov-action@master
+      continue-on-error: true
+      with:
+        directory: terraform
+        framework: terraform
+        soft_fail: true
+
+    - name: Determine Overall Status
+      id: overall
+      if: always()
+      run: |
+        if [ "${{ steps.gitleaks.outcome }}" = "failure" ] || \
+           [ "${{ steps.sonar.outcome }}" = "failure" ] || \
+           [ "${{ steps.snyk.outcome }}" = "failure" ] || \
+           [ "${{ steps.trivy.outcome }}" = "failure" ] || \
+           [ "${{ steps.checkov.outcome }}" = "failure" ]; then
+          echo "status=vulnerable" >> $GITHUB_OUTPUT
+        else
+          echo "status=secure" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Deploy to Vercel
+      if: steps.overall.outputs.status == 'secure'
+      run: |
+        npm install -g vercel
+        vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+    - name: Report Security Status
+      if: always()
+      continue-on-error: true
+      run: |
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        curl -X POST https://dev-sec-app-8l55.vercel.app/api/security-report \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"status\": \"${{ steps.overall.outputs.status }}\",
+          \"message\": \"Pipeline run completed at $TIMESTAMP\",
+          \"timestamp\": \"$TIMESTAMP\",
+          \"gates\": {
+            \"gitleaks\": \"${{ steps.gitleaks.outcome }}\",
+            \"sonarqube\": \"${{ steps.sonar.outcome }}\",
+            \"snyk\": \"${{ steps.snyk.outcome }}\",
+            \"trivy\": \"${{ steps.trivy.outcome }}\",
+            \"checkov\": \"${{ steps.checkov.outcome }}\"
+          }
+        }"
