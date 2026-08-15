@@ -1,12 +1,6 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { timingSafeEqual } from 'crypto';
-
-// Fail fast if Redis isn't configured, instead of silently falling back to a
-// dummy endpoint that makes every request quietly no-op.
-if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-  throw new Error('Missing Upstash Redis configuration (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN)');
-}
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
@@ -24,8 +18,10 @@ const defaultStatus = {
   timestamp: new Date().toISOString(),
 };
 
-// Constant-time comparison so an attacker can't use response timing to guess
-// the webhook secret one character at a time.
+function isRedisConfigured() {
+  return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 function safeCompare(a, b) {
   const bufA = Buffer.from(a ?? '');
   const bufB = Buffer.from(b ?? '');
@@ -34,19 +30,17 @@ function safeCompare(a, b) {
 }
 
 export async function POST(request) {
+  if (!isRedisConfigured()) {
+    console.error('Missing Upstash Redis configuration');
+    return NextResponse.json({ success: false, error: 'Server misconfigured' }, { status: 500 });
+  }
   try {
-    // --- Auth check: only GitHub Actions with the shared secret can write ---
     const incomingSecret = request.headers.get('x-webhook-secret');
     const expectedSecret = process.env.REPORT_WEBHOOK_SECRET;
-
     if (!expectedSecret || !safeCompare(incomingSecret, expectedSecret)) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
-
     const data = await request.json();
-
-    // Shape + size validation so bad or oversized payloads can't corrupt the
-    // dashboard or bloat the Redis history list.
     if (
       !data ||
       typeof data.status !== 'string' ||
@@ -56,11 +50,9 @@ export async function POST(request) {
     ) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
-
     await redis.set(STATUS_KEY, data);
     await redis.lpush(HISTORY_KEY, data);
     await redis.ltrim(HISTORY_KEY, 0, MAX_HISTORY - 1);
-
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error('Failed to persist security report:', err);
@@ -69,16 +61,16 @@ export async function POST(request) {
 }
 
 export async function GET() {
+  if (!isRedisConfigured()) {
+    console.error('Missing Upstash Redis configuration');
+    return NextResponse.json({ ...defaultStatus, history: [] }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
+  }
   try {
     const status = (await redis.get(STATUS_KEY)) || defaultStatus;
     const history = (await redis.lrange(HISTORY_KEY, 0, 9)) || [];
-    return NextResponse.json({ ...status, history }, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' },
-    });
+    return NextResponse.json({ ...status, history }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
   } catch (err) {
     console.error('Failed to read security status, using default:', err);
-    return NextResponse.json({ ...defaultStatus, history: [] }, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' },
-    });
+    return NextResponse.json({ ...defaultStatus, history: [] }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
   }
 }
