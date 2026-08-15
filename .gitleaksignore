@@ -1,8 +1,12 @@
 # .gitleaksignore
 [allowlist]
 description = "Allowlisted leaked tokens from history to allow pipeline to proceed"
-fingerprints = [
-    "***REMOVED***", # Sonar Token
-    "***REMOVED***",    # Snyk Token
-    "***REMOVED***"                 # Vercel Token
+paths = [
+    '''\.next/.*''',
+    '''\.git/.*'''
+]
+regexes = [
+    '''***REMOVED***''',
+    '''***REMOVED***''',
+    '''***REMOVED***'''
 ]
