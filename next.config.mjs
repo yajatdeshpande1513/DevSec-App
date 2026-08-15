@@ -30,7 +30,7 @@ const nextConfig = {
             // <script> tags anywhere, switch to a nonce-based CSP via Next.js
             // middleware instead of re-adding 'unsafe-inline' here.
             value:
-              "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;",
+               "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;",
           },
           {
             key: 'Strict-Transport-Security',
