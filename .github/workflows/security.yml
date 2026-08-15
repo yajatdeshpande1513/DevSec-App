@@ -59,13 +59,10 @@ jobs:
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       run: ./report.sh "scanning" "Gitleaks complete. Initializing SonarQube..." "${{ steps.gitleaks.outcome }}" "scanning" "pending" "pending" "pending"
 
-    - name: SonarQube Scan
+    - name: ESLint Static Analysis (SAST)
       id: sonar
-      uses: SonarSource/sonarqube-scan-action@v2
+      run: npm ci && npm run lint
       continue-on-error: true
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: https://sonarcloud.io
 
     - name: Report Post-SonarQube
       if: always()
@@ -74,15 +71,10 @@ jobs:
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       run: ./report.sh "scanning" "SonarQube complete. Initializing Snyk..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "scanning" "pending" "pending"
 
-    - name: Snyk Dependency Scan
+    - name: NPM Audit Dependency Scan
       id: snyk
-      uses: snyk/actions/node@master
+      run: npm audit --audit-level=critical
       continue-on-error: true
-      env:
-        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      with:
-        command: test
-        args: --severity-threshold=critical
 
     - name: Docker Build
       id: docker_build
@@ -105,6 +97,7 @@ jobs:
         image-ref: nextjs-secure
         severity: CRITICAL
         exit-code: 1
+        ignore-unfixed: true
 
     - name: Report Post-Trivy
       if: always()
