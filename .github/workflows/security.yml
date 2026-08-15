@@ -18,11 +18,46 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Prepare Telemetry Script
+      run: |
+        cat << 'EOF' > report.sh
+        #!/bin/bash
+        curl -sS -X POST $WEBHOOK_URL \
+        -H "Content-Type: application/json" \
+        -H "x-webhook-secret: $REPORT_WEBHOOK_SECRET" \
+        -d "{
+          \"status\": \"$1\",
+          \"message\": \"$2\",
+          \"timestamp\": \"$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\",
+          \"gates\": {
+            \"gitleaks\": \"$3\",
+            \"sonarqube\": \"$4\",
+            \"snyk\": \"$5\",
+            \"trivy\": \"$6\",
+            \"checkov\": \"$7\"
+          }
+        }"
+        EOF
+        chmod +x report.sh
+
+    - name: Report Start
+      env:
+        REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      run: ./report.sh "scanning" "Pipeline started. Initializing Gitleaks..." "scanning" "pending" "pending" "pending" "pending"
+
     - name: Gitleaks Scan
       id: gitleaks
       continue-on-error: true
       run: |
         docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:latest detect --source=/repo --no-git -v
+
+    - name: Report Post-Gitleaks
+      if: always()
+      env:
+        REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      run: ./report.sh "scanning" "Gitleaks complete. Initializing SonarQube..." "${{ steps.gitleaks.outcome }}" "scanning" "pending" "pending" "pending"
 
     - name: SonarQube Scan
       id: sonar
@@ -31,6 +66,13 @@ jobs:
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         SONAR_HOST_URL: https://sonarcloud.io
+
+    - name: Report Post-SonarQube
+      if: always()
+      env:
+        REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      run: ./report.sh "scanning" "SonarQube complete. Initializing Snyk..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "scanning" "pending" "pending"
 
     - name: Snyk Dependency Scan
       id: snyk
@@ -46,6 +88,13 @@ jobs:
       run: docker build -t nextjs-secure .
       continue-on-error: true
 
+    - name: Report Post-Snyk
+      if: always()
+      env:
+        REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      run: ./report.sh "scanning" "Snyk complete. Initializing Trivy..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "${{ steps.snyk.outcome }}" "scanning" "pending"
+
     - name: Trivy Container Scan
       id: trivy
       if: steps.docker_build.outcome == 'success'
@@ -55,6 +104,13 @@ jobs:
         image-ref: nextjs-secure
         severity: CRITICAL
         exit-code: 1
+
+    - name: Report Post-Trivy
+      if: always()
+      env:
+        REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+      run: ./report.sh "scanning" "Trivy complete. Initializing Checkov..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "${{ steps.snyk.outcome }}" "${{ steps.trivy.outcome || 'skipped' }}" "scanning"
 
     - name: Terraform Init
       id: tf_init
@@ -70,7 +126,7 @@ jobs:
       with:
         directory: terraform
         framework: terraform
-        soft_fail: false   # <-- was true; a soft-failed scan can never fail the gate
+        soft_fail: false
 
     - name: Determine Overall Status
       id: overall
@@ -97,28 +153,11 @@ jobs:
         vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
         vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
 
-    - name: Report Security Status
+    - name: Report Final Status
       if: always()
-      continue-on-error: true
       env:
         REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-        
       run: |
-        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         DEPLOY_OUTCOME="${{ steps.deploy.outcome || 'skipped' }}"
-        curl -sS -X POST $WEBHOOK_URL \
-        -H "Content-Type: application/json" \
-        -H "x-webhook-secret: $REPORT_WEBHOOK_SECRET" \
-        -d "{
-          \"status\": \"${{ steps.overall.outputs.status }}\",
-          \"message\": \"Pipeline run completed at $TIMESTAMP (deploy: $DEPLOY_OUTCOME)\",
-          \"timestamp\": \"$TIMESTAMP\",
-          \"gates\": {
-            \"gitleaks\": \"${{ steps.gitleaks.outcome }}\",
-            \"sonarqube\": \"${{ steps.sonar.outcome }}\",
-            \"snyk\": \"${{ steps.snyk.outcome }}\",
-            \"trivy\": \"${{ steps.trivy.outcome || 'skipped' }}\",
-            \"checkov\": \"${{ steps.checkov.outcome }}\"
-          }
-        }"
+        ./report.sh "${{ steps.overall.outputs.status }}" "Pipeline completed (deploy: $DEPLOY_OUTCOME)" "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "${{ steps.snyk.outcome }}" "${{ steps.trivy.outcome || 'skipped' }}" "${{ steps.checkov.outcome }}"

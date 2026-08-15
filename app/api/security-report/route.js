@@ -47,12 +47,13 @@ export async function POST(request) {
 export async function GET() {
   try {
     const status = (await redis.get(STATUS_KEY)) || defaultStatus;
-    return NextResponse.json(status, {
+    const history = (await redis.lrange(HISTORY_KEY, 0, 9)) || [];
+    return NextResponse.json({ ...status, history }, {
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
   } catch (err) {
     console.error('Failed to read security status, using default:', err);
-    return NextResponse.json(defaultStatus, {
+    return NextResponse.json({ ...defaultStatus, history: [] }, {
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
   }
