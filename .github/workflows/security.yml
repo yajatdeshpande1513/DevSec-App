@@ -142,6 +142,11 @@ jobs:
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       run: ./report.sh "scanning" "Trivy complete. Initializing Checkov..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outputs.outcome }}" "${{ steps.snyk.outcome }}" "${{ steps.trivy.outcome || 'skipped' }}" "scanning"
 
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_wrapper: false
+              
     - name: Terraform Init
       id: tf_init
       run: |
