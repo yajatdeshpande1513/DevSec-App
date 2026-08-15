@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 
 const TOOLS = [
   { key: 'gitleaks', label: 'Gitleaks', icon: '🔑', desc: 'Secret Scanning' },
-  { key: 'sonarqube', label: 'SonarQube', icon: '🔍', desc: 'Static Analysis (SAST)' },
-  { key: 'snyk', label: 'Snyk', icon: '📦', desc: 'Dependency Scanning' },
+  { key: 'sonarqube', label: 'ESLint', icon: '🔍', desc: 'Static Analysis (SAST)' },
+  { key: 'snyk', label: 'npm audit', icon: '📦', desc: 'Dependency Scanning' },
   { key: 'trivy', label: 'Trivy', icon: '🐳', desc: 'Container Image Scan' },
   { key: 'checkov', label: 'Checkov', icon: '🏗️', desc: 'Infra-as-Code Scan' },
 ];
