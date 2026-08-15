@@ -28,6 +28,7 @@ Rather than digging through raw CI logs to understand the security posture of a 
 
 ---
 
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 ## 🚀 Getting Started (Local Development)
 
 ### Prerequisites
