@@ -22,21 +22,31 @@ jobs:
       run: |
         cat << 'EOF' > report.sh
         #!/bin/bash
-        curl -sS -X POST $WEBHOOK_URL \
-        -H "Content-Type: application/json" \
-        -H "x-webhook-secret: $REPORT_WEBHOOK_SECRET" \
-        -d "{
-          \"status\": \"$1\",
-          \"message\": \"$2\",
-          \"timestamp\": \"$(date -u +\"%Y-%m-%dT%H:%M:%SZ\")\",
-          \"gates\": {
-            \"gitleaks\": \"$3\",
-            \"sonarqube\": \"$4\",
-            \"snyk\": \"$5\",
-            \"trivy\": \"$6\",
-            \"checkov\": \"$7\"
-          }
-        }"
+        # Builds the JSON payload with jq instead of string interpolation so a
+        # stray quote/backslash in any argument can never produce broken JSON.
+        jq -n \
+          --arg status "$1" \
+          --arg message "$2" \
+          --arg gitleaks "$3" \
+          --arg sonarqube "$4" \
+          --arg snyk "$5" \
+          --arg trivy "$6" \
+          --arg checkov "$7" \
+          '{
+            status: $status,
+            message: $message,
+            timestamp: (now | todate),
+            gates: {
+              gitleaks: $gitleaks,
+              sonarqube: $sonarqube,
+              snyk: $snyk,
+              trivy: $trivy,
+              checkov: $checkov
+            }
+          }' | curl -sS -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-webhook-secret: $REPORT_WEBHOOK_SECRET" \
+            -d @-
         EOF
         chmod +x report.sh
 
@@ -50,7 +60,10 @@ jobs:
       id: gitleaks
       continue-on-error: true
       run: |
-        docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:latest detect --source=/repo --no-git -v
+        # NOTE: --no-git was removed. It was making this scan blind to commit
+        # history, which is exactly where the previously-leaked tokens live.
+        # This will (correctly) FAIL until Phase 0 history purge is done.
+        docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:v8.21.2 detect --source=/repo -v
 
     - name: Report Post-Gitleaks
       if: always()
@@ -59,17 +72,35 @@ jobs:
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       run: ./report.sh "scanning" "Gitleaks complete. Initializing SonarQube..." "${{ steps.gitleaks.outcome }}" "scanning" "pending" "pending" "pending"
 
-    - name: ESLint Static Analysis (SAST)
-      id: sonar
+    - name: ESLint (incl. eslint-plugin-security rules)
+      id: eslint
       run: npm ci && npm run lint
       continue-on-error: true
+
+    - name: SonarCloud Scan
+      id: sonarqube_scan
+      uses: SonarSource/sonarqube-scan-action@v8.2.0
+      continue-on-error: true
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    - name: Determine SAST Outcome
+      id: sonar
+      if: always()
+      run: |
+        if [ "${{ steps.eslint.outcome }}" = "failure" ] || \
+           [ "${{ steps.sonarqube_scan.outcome }}" = "failure" ]; then
+          echo "outcome=failure" >> $GITHUB_OUTPUT
+        else
+          echo "outcome=success" >> $GITHUB_OUTPUT
+        fi
 
     - name: Report Post-SonarQube
       if: always()
       env:
         REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-      run: ./report.sh "scanning" "SonarQube complete. Initializing Snyk..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "scanning" "pending" "pending"
+      run: ./report.sh "scanning" "SonarQube complete. Initializing Snyk..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outputs.outcome }}" "scanning" "pending" "pending"
 
     - name: NPM Audit Dependency Scan
       id: snyk
@@ -86,12 +117,17 @@ jobs:
       env:
         REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-      run: ./report.sh "scanning" "Snyk complete. Initializing Trivy..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "${{ steps.snyk.outcome }}" "scanning" "pending"
+      run: ./report.sh "scanning" "Snyk complete. Initializing Trivy..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outputs.outcome }}" "${{ steps.snyk.outcome }}" "scanning" "pending"
 
     - name: Trivy Container Scan
       id: trivy
       if: steps.docker_build.outcome == 'success'
-      uses: aquasecurity/trivy-action@master
+      # IMPORTANT: v0.28.0 was one of the tags poisoned in the March 2026
+      # trivy-action supply chain attack (CVE-2026-33634). v0.35.0 was the
+      # only tag confirmed never compromised; v0.36.0 is current safe latest.
+      # Prefer pinning to a full commit SHA over any tag going forward —
+      # tags are mutable and this is exactly how the attack worked.
+      uses: aquasecurity/trivy-action@v0.36.0
       continue-on-error: true
       with:
         image-ref: nextjs-secure
@@ -104,7 +140,7 @@ jobs:
       env:
         REPORT_WEBHOOK_SECRET: ${{ secrets.REPORT_WEBHOOK_SECRET }}
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-      run: ./report.sh "scanning" "Trivy complete. Initializing Checkov..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "${{ steps.snyk.outcome }}" "${{ steps.trivy.outcome || 'skipped' }}" "scanning"
+      run: ./report.sh "scanning" "Trivy complete. Initializing Checkov..." "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outputs.outcome }}" "${{ steps.snyk.outcome }}" "${{ steps.trivy.outcome || 'skipped' }}" "scanning"
 
     - name: Terraform Init
       id: tf_init
@@ -113,9 +149,19 @@ jobs:
         terraform init -backend=false
       continue-on-error: true
 
+    - name: Terraform Validate
+      id: tf_validate
+      run: |
+        cd terraform
+        terraform validate
+      continue-on-error: true
+
     - name: Checkov Scan (IaC)
       id: checkov
-      uses: bridgecrewio/checkov-action@master
+      # NOTE: verify this tag actually exists on bridgecrewio/checkov-action
+      # before merging — unverified at time of writing. Given the trivy
+      # incident, consider pinning this to a commit SHA too.
+      uses: bridgecrewio/checkov-action@v12.2926.0
       continue-on-error: true
       with:
         directory: terraform
@@ -127,10 +173,12 @@ jobs:
       if: always()
       run: |
         if [ "${{ steps.gitleaks.outcome }}" = "failure" ] || \
-           [ "${{ steps.sonar.outcome }}" = "failure" ] || \
+           [ "${{ steps.sonar.outputs.outcome }}" = "failure" ] || \
            [ "${{ steps.snyk.outcome }}" = "failure" ] || \
            [ "${{ steps.docker_build.outcome }}" = "failure" ] || \
            [ "${{ steps.trivy.outcome }}" = "failure" ] || \
+           [ "${{ steps.tf_init.outcome }}" = "failure" ] || \
+           [ "${{ steps.tf_validate.outcome }}" = "failure" ] || \
            [ "${{ steps.checkov.outcome }}" = "failure" ]; then
           echo "status=vulnerable" >> $GITHUB_OUTPUT
         else
@@ -154,4 +202,4 @@ jobs:
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       run: |
         DEPLOY_OUTCOME="${{ steps.deploy.outcome || 'skipped' }}"
-        ./report.sh "${{ steps.overall.outputs.status }}" "Pipeline completed (deploy: $DEPLOY_OUTCOME)" "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outcome }}" "${{ steps.snyk.outcome }}" "${{ steps.trivy.outcome || 'skipped' }}" "${{ steps.checkov.outcome }}"
+        ./report.sh "${{ steps.overall.outputs.status }}" "Pipeline completed (deploy: $DEPLOY_OUTCOME)" "${{ steps.gitleaks.outcome }}" "${{ steps.sonar.outputs.outcome }}" "${{ steps.snyk.outcome }}" "${{ steps.trivy.outcome || 'skipped' }}" "${{ steps.checkov.outcome }}"

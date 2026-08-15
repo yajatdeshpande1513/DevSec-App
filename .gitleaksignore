@@ -1,12 +1,12 @@
-# .gitleaksignore
-[allowlist]
-description = "Allowlisted leaked tokens from history to allow pipeline to proceed"
-paths = [
-    '''\.next/.*''',
-    '''\.git/.*'''
-]
-regexes = [
-    '''***REMOVED***''',
-    '''***REMOVED***''',
-    '''***REMOVED***'''
-]
+# The previous [allowlist] block that silenced the leaked Sonar/Snyk/Vercel
+# token fingerprints has been intentionally removed.
+#
+# Do NOT re-add those fingerprints here. Now that the Gitleaks step scans full
+# git history (--no-git was removed from the workflow), it will correctly
+# FAIL and re-flag those exact fingerprints on every run until you've:
+#   1. Rotated all three tokens at the source (Sonar/Snyk/Vercel)
+#   2. Purged them from git history (git-filter-repo or BFG, then force-push)
+#
+# That CI failure is a feature, not a bug — it's your confirmation the purge
+# hasn't happened yet. Once history is genuinely clean, this file should stay
+# empty unless a *new*, unavoidable false positive shows up
