@@ -55,5 +55,5 @@ resource "vercel_project" "nextjs" {
 # will catch it immediately if this resource name has changed or moved.
 resource "vercel_project_deployment_retention" "retention" {
   project_id                   = vercel_project.nextjs.id
-  production_retention_period  = 30
+  expiration_production = "1m"
 }
