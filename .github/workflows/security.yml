@@ -63,7 +63,7 @@ jobs:
         # NOTE: --no-git was removed. It was making this scan blind to commit
         # history, which is exactly where the previously-leaked tokens live.
         # This will (correctly) FAIL until Phase 0 history purge is done.
-        docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:v8.21.2 detect --source=/repo -v
+        docker run --rm -v ${{ github.workspace }}:/repo zricethezav/gitleaks:v8.21.2 detect --source=/repo --log-opts="HEAD" -v
 
     - name: Report Post-Gitleaks
       if: always()
